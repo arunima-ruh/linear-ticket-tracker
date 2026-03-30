@@ -1,0 +1,19 @@
+{
+  "name": "linear-ticket-tracker",
+  "version": "1.0.0",
+  "description": "Daily Linear ticket tracker with status change detection and Telegram delivery",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "dependencies": {
+    "@linear/sdk": "^32.0.0",
+    "pg": "^8.13.1",
+    "node-fetch": "^3.3.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
