@@ -1,138 +1,137 @@
 # Quick Start Guide
 
-Get up and running in 5 minutes.
+Get the Linear Ticket Tracker running in 5 minutes.
 
-## Prerequisites Checklist
+## Prerequisites
 
-- [ ] PostgreSQL database (local or remote)
-- [ ] Linear account with API access
-- [ ] Telegram bot created via @BotFather
-- [ ] Bot added to target chat/channel
+- Node.js 18+
+- PostgreSQL database (local or cloud)
+- Linear account with API access
+- Telegram bot
 
-## 1. Install Dependencies
+## Step 1: Clone & Install
 
 ```bash
-cd output/linear-ticket-tracker
+git clone https://github.com/arunima-ruh/linear-ticket-tracker.git
+cd linear-ticket-tracker
 npm install
 ```
 
-## 2. Configure Environment
+## Step 2: Get Credentials
+
+### Linear API Key
+1. Go to https://linear.app/settings/api
+2. Create new personal API key
+3. Copy the key (starts with `lin_api_`)
+
+### Telegram Bot
+1. Message [@BotFather](https://t.me/BotFather)
+2. Send `/newbot`
+3. Follow prompts, copy token
+
+### Telegram Chat ID
+1. Message [@userinfobot](https://t.me/userinfobot)
+2. Copy your user ID
+3. Or add bot to group and use [@userinfobot](https://t.me/userinfobot) there
+
+### PostgreSQL
+Quick local setup:
+```bash
+docker run -d \
+  --name linear-db \
+  -e POSTGRES_PASSWORD=mypassword \
+  -e POSTGRES_DB=linear_tracker \
+  -p 5432:5432 \
+  postgres:15
+```
+
+Or use free cloud: [Supabase](https://supabase.com) | [Neon](https://neon.tech)
+
+## Step 3: Configure
 
 ```bash
 cp .env.example .env
 ```
 
-Edit `.env` with your credentials:
-
+Edit `.env`:
 ```bash
-PG_CONNECTION_STRING=postgresql://user:password@localhost:5432/linear_tracker
 LINEAR_API_KEY=lin_api_xxxxxxxxxxxxx
-LINEAR_USER_EMAIL=you@example.com
-TELEGRAM_CHAT_ID=-1001234567890
+LINEAR_USER_EMAIL=your.email@example.com
+TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
+TELEGRAM_CHAT_ID=123456789
+PG_CONNECTION_STRING=postgresql://postgres:mypassword@localhost:5432/linear_tracker
 ```
 
-### Where to get each value:
-
-| Variable | Where to get it |
-|----------|-----------------|
-| `PG_CONNECTION_STRING` | Your PostgreSQL server |
-| `LINEAR_API_KEY` | [linear.app/settings/api](https://linear.app/settings/api) |
-| `LINEAR_USER_EMAIL` | Your Linear login email |
-| `TELEGRAM_CHAT_ID` | Message [@userinfobot](https://t.me/userinfobot) |
-
-## 3. Test Run
+## Step 4: Test Run
 
 ```bash
-# Load environment variables
-export $(cat .env | xargs)
-
-# Run tracker
-node tracker.js
+npm start
 ```
 
-Expected output:
+You should see:
 ```
-🚀 Linear Ticket Tracker starting...
-✅ Configuration validated
-✅ Database connected
-✅ Database schema initialized
-🔍 Fetching tickets from Linear...
-✅ Found X active tickets
-🔍 Detecting changes...
-✅ Changes detected: X new, X status changed, X updated
-📤 Sending Telegram digest...
-✅ Digest sent successfully
+🚀 Starting Linear Ticket Tracker...
+✅ Database initialized
+📋 Fetching issues for user: Your Name (your.email@example.com)
+✅ Stored snapshot for X issues
+✅ Telegram message sent
 ✅ Linear Ticket Tracker completed successfully
 ```
 
-## 4. Schedule Daily Runs
+Check Telegram for your first report! 📱
 
-### OpenClaw Cron
+## Step 5: Schedule (OpenClaw)
 
 ```bash
 openclaw cron add \
-  --name "linear-ticket-tracker" \
+  --name linear-tracker \
   --schedule "30 4 * * *" \
-  --timezone "UTC" \
-  --command "cd $(pwd) && node tracker.js" \
-  --env PG_CONNECTION_STRING="$(echo $PG_CONNECTION_STRING)" \
-  --env LINEAR_API_KEY="$(echo $LINEAR_API_KEY)" \
-  --env LINEAR_USER_EMAIL="$(echo $LINEAR_USER_EMAIL)" \
-  --env TELEGRAM_CHAT_ID="$(echo $TELEGRAM_CHAT_ID)"
+  --command "cd $(pwd) && npm start" \
+  --env-file $(pwd)/.env
 ```
 
-### System Cron
+That's it! Daily reports at 10:00 AM IST. 🎉
+
+## Verify
 
 ```bash
-crontab -e
-
-# Add line (replace /full/path/to):
-30 4 * * * cd /full/path/to/linear-ticket-tracker && /usr/bin/node tracker.js >> /tmp/tracker.log 2>&1
-```
-
-## 5. Verify
-
-```bash
-# Check database
-psql $PG_CONNECTION_STRING -c "SELECT COUNT(*) FROM linear_ticket_snapshots;"
-
-# Trigger manually
-openclaw cron trigger linear-ticket-tracker
+# Check cron job
+openclaw cron list
 
 # View logs
-openclaw cron logs linear-ticket-tracker
+openclaw cron logs linear-tracker
+
+# Check database
+psql "$PG_CONNECTION_STRING" -c "SELECT COUNT(*) FROM linear_ticket_snapshots;"
 ```
 
 ## Troubleshooting
 
-### "Missing required environment variables"
-→ Check `.env` file exists and all variables are set
+**No Telegram message?**
+- Verify bot token with: `curl https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getMe`
+- Check chat ID is correct
+- Make sure bot can send messages to you/group
 
-### "User not found"
-→ Verify `LINEAR_USER_EMAIL` matches your Linear account exactly
+**Database error?**
+- Test connection: `psql "$PG_CONNECTION_STRING" -c "SELECT NOW();"`
+- Check credentials in `.env`
 
-### "Telegram API error"
-→ Verify bot is added to the chat/channel. For channels, bot must be admin.
+**Linear API error?**
+- Verify email matches your Linear account
+- Check API key has not expired
+- Test: `curl -H "Authorization: $LINEAR_API_KEY" https://api.linear.app/graphql -d '{"query":"{viewer{name}}"}'`
 
-### "Connection refused" (database)
-→ Check PostgreSQL is running: `systemctl status postgresql`
+## What's Next?
 
-## Next Steps
+- Read [README.md](README.md) for full documentation
+- See [DEPLOY.md](DEPLOY.md) for deployment details
+- Check [SYSTEM_SUMMARY.md](SYSTEM_SUMMARY.md) for architecture
 
-- Read `README.md` for full documentation
-- Review `DEPLOYMENT.md` for production setup
-- Check `SYSTEM_SUMMARY.md` for architecture details
+## Need Help?
 
-## Schedule Reference
-
-| Time (IST) | Cron (UTC) | Description |
-|------------|------------|-------------|
-| 10:00 AM   | `30 4 * * *` | Daily morning digest |
-| 6:00 PM    | `30 12 * * *` | Daily evening digest |
-| 10:00 AM (weekdays) | `30 4 * * 1-5` | Weekday mornings only |
-
-**Remember**: IST = UTC + 5:30, so 10:00 AM IST = 4:30 AM UTC
+Open an issue at: https://github.com/arunima-ruh/linear-ticket-tracker/issues
 
 ---
 
-Need help? Check the troubleshooting section in `README.md` or `DEPLOYMENT.md`.
+**Time to first report**: ~5 minutes ⏱️  
+**Daily automation**: One command 🚀
