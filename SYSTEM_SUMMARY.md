@@ -2,295 +2,260 @@
 
 ## Overview
 
-A production-ready cron-scheduled system that tracks Linear tickets assigned to a user, detects status changes, and delivers daily digests via Telegram.
+A production-ready Linear ticket tracking system that monitors assigned issues, detects status changes, and delivers daily reports via Telegram.
 
-## Key Features
+## Repository
 
-✅ **Status Change Detection** - Compares current tickets against historical snapshots to detect:
-- New tickets assigned
-- Status/state changes
-- General updates
+**GitHub**: https://github.com/arunima-ruh/linear-ticket-tracker
 
-✅ **PostgreSQL Persistence** - Stores ticket snapshots with full history:
-- Automatic schema creation
-- Indexed for performance
-- Tracks all ticket metadata
+## Core Functionality
 
-✅ **Formatted Telegram Digests** - Rich HTML notifications with:
-- Summary statistics
-- Priority emoji indicators (🔴🟠🟡🔵)
-- Clickable ticket links
-- Grouped by status
+### 1. Issue Tracking
+- Fetches all Linear issues assigned to a specific user
+- Stores snapshots in PostgreSQL for historical comparison
+- Automatic database schema initialization
 
-✅ **Linear GraphQL Integration** - Fetches tickets via official API:
-- Filters for active tickets only (not completed/canceled)
-- Full ticket metadata (title, status, priority, assignee, dates)
-- User-specific assignment filtering
+### 2. Change Detection
+- Identifies new issues since last run
+- Detects status changes between snapshots
+- First-run baseline handling
 
-✅ **Production Ready** - Includes:
-- Error handling and validation
-- Environment variable configuration
-- Docker support
-- Comprehensive documentation
-- Security best practices
+### 3. Telegram Reporting
+- Daily formatted report with:
+  - Summary statistics (total, new, changed)
+  - Status change details (old → new)
+  - New issue listings
+  - Complete breakdown by current status
+- Markdown formatting with clickable issue links
+- Error notifications on failure
 
-## Architecture
+## Technical Architecture
+
+### Components
 
 ```
 ┌─────────────────┐
-│   Cron Trigger  │  Daily at 10:00 AM IST
+│  OpenClaw Cron  │ (10:00 AM IST daily)
 └────────┬────────┘
          │
          ▼
 ┌─────────────────┐
-│  tracker.js     │  Main application
+│   Node.js App   │
+│   (index.js)    │
 └────────┬────────┘
          │
-         ├──────────────────────┐
-         │                      │
-         ▼                      ▼
-┌─────────────────┐   ┌──────────────────┐
-│  Linear API     │   │  PostgreSQL DB   │
-│  (GraphQL)      │   │  (Snapshots)     │
-└────────┬────────┘   └────────┬─────────┘
-         │                      │
-         │   Compare & Detect   │
-         └──────────┬───────────┘
-                    │
-                    ▼
-           ┌─────────────────┐
-           │  Telegram Bot   │
-           │  (Send Digest)  │
-           └─────────────────┘
+    ┌────┴────┐
+    │         │
+    ▼         ▼
+┌────────┐  ┌───────────┐
+│ Linear │  │PostgreSQL │
+│  API   │  │ Database  │
+└────────┘  └───────────┘
+    │
+    ▼
+┌──────────────┐
+│  Telegram    │
+│     Bot      │
+└──────────────┘
 ```
 
-## Files Delivered
-
-```
-output/linear-ticket-tracker/
-├── tracker.js           # Main application (executable)
-├── package.json         # Node.js dependencies
-├── README.md            # User documentation
-├── DEPLOYMENT.md        # Deployment guide
-├── SYSTEM_SUMMARY.md    # This file
-├── .env.example         # Environment variable template
-├── .gitignore           # Git ignore rules
-└── Dockerfile           # Container build file
-```
-
-## Configuration Requirements
-
-### Required Environment Variables
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `PG_CONNECTION_STRING` | PostgreSQL connection URL | `postgresql://user:pass@host:5432/db` |
-| `LINEAR_API_KEY` | Linear API key | `lin_api_xxxxxxxxxxxxx` |
-| `LINEAR_USER_EMAIL` | User's Linear email | `you@example.com` |
-| `TELEGRAM_CHAT_ID` | Telegram chat/channel ID | `-1001234567890` |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token (optional*) | Auto-detected from OpenClaw |
-
-*Token auto-detected from `~/.openclaw/plugins.json` when running in OpenClaw environment.
-
-## Database Schema
+### Database Schema
 
 ```sql
-CREATE TABLE linear_ticket_snapshots (
+linear_ticket_snapshots (
   id SERIAL PRIMARY KEY,
   ticket_id TEXT NOT NULL,
-  ticket_identifier TEXT NOT NULL,      -- e.g., "ENG-123"
+  ticket_identifier TEXT NOT NULL,  -- e.g., "ENG-123"
   title TEXT NOT NULL,
-  status TEXT NOT NULL,                 -- e.g., "backlog", "in_progress"
-  state_name TEXT NOT NULL,             -- e.g., "In Progress"
-  assignee TEXT,
-  priority INTEGER,                     -- 1=urgent, 2=high, 3=medium, 4=low
-  created_at TIMESTAMPTZ NOT NULL,
-  updated_at TIMESTAMPTZ NOT NULL,
-  snapshot_at TIMESTAMPTZ DEFAULT NOW(),
-  url TEXT NOT NULL,
-  UNIQUE(ticket_id, snapshot_at)
-);
+  status TEXT NOT NULL,
+  priority INTEGER,
+  assignee_name TEXT,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL,
+  snapshot_time TIMESTAMP DEFAULT NOW(),
+  url TEXT,
+  UNIQUE(ticket_id, snapshot_time)
+)
 ```
 
-## Deployment Options
+### Dependencies
 
-### 1. OpenClaw Cron (Recommended)
+- `@linear/sdk` - Official Linear API client
+- `pg` - PostgreSQL client
+- `node-fetch` - HTTP client for Telegram API
+
+## Environment Configuration
+
+Required variables:
+
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `LINEAR_API_KEY` | Linear API authentication | `lin_api_xxxxx` |
+| `LINEAR_USER_EMAIL` | User to track issues for | `user@example.com` |
+| `TELEGRAM_BOT_TOKEN` | Bot authentication | `123456789:ABC...` |
+| `TELEGRAM_CHAT_ID` | Delivery destination | `-1001234567890` |
+| `PG_CONNECTION_STRING` | Database connection | `postgresql://user:pass@host/db` |
+
+## Deployment
+
+### OpenClaw Cron Schedule
 
 ```bash
 openclaw cron add \
-  --name "linear-ticket-tracker" \
+  --name linear-tracker \
   --schedule "30 4 * * *" \
-  --timezone "UTC" \
-  --command "cd /path/to/output/linear-ticket-tracker && node tracker.js" \
-  --env PG_CONNECTION_STRING="..." \
-  --env LINEAR_API_KEY="..." \
-  --env LINEAR_USER_EMAIL="..." \
-  --env TELEGRAM_CHAT_ID="..."
+  --command "cd /path/to/linear-ticket-tracker && npm start" \
+  --env-file .env
 ```
 
-### 2. System Cron
+**Schedule**: 4:30 UTC = 10:00 AM IST (daily)
+
+### Manual Execution
 
 ```bash
-# crontab -e
-30 4 * * * cd /path/to/tracker && node tracker.js >> /tmp/tracker.log 2>&1
-```
-
-### 3. Docker
-
-```bash
-docker build -t linear-ticket-tracker .
-docker run --rm \
-  -e PG_CONNECTION_STRING="..." \
-  -e LINEAR_API_KEY="..." \
-  -e LINEAR_USER_EMAIL="..." \
-  -e TELEGRAM_CHAT_ID="..." \
-  linear-ticket-tracker
-```
-
-### 4. Kubernetes CronJob
-
-See `DEPLOYMENT.md` for full K8s manifest.
-
-## Sample Output
-
-```
-📊 Linear Ticket Daily Digest
-⏰ Monday, March 30, 2026 at 10:00 AM
-
-📝 Active tickets: 8
-🔄 Status changed: 2
-✨ New: 1
-
-🔄 Status Changes
-🔴 ENG-456: Fix critical auth bug
-   In Progress → Ready for Review
-
-🟠 ENG-789: Implement new dashboard
-   Todo → In Progress
-
-✨ New Tickets
-🟡 ENG-101: Refactor API layer
-   Status: Todo
-
-📋 Active Tickets Summary
-
-In Progress (3)
-🔴 ENG-456: Fix critical auth bug
-🟠 ENG-789: Implement new dashboard
-🟡 ENG-234: Update documentation
-
-Todo (4)
-🟡 ENG-101: Refactor API layer
-🔵 ENG-567: Add unit tests
-...
-```
-
-## Testing
-
-```bash
-# Install dependencies
-cd output/linear-ticket-tracker
 npm install
-
-# Set environment variables
-export PG_CONNECTION_STRING="postgresql://..."
-export LINEAR_API_KEY="lin_api_..."
-export LINEAR_USER_EMAIL="you@example.com"
-export TELEGRAM_CHAT_ID="-1001234567890"
-
-# Run tracker
 npm start
 ```
 
-## Monitoring
+## Report Format Example
 
-### Success Indicators
-- ✅ Telegram message received daily at scheduled time
-- ✅ New snapshots in database after each run
-- ✅ No error logs in cron output
+```
+📊 Linear Ticket Tracker Report
+Monday, March 30, 2026 at 10:00 AM
+
+Summary:
+• Total assigned issues: 12
+• New issues: 2
+• Status changes: 3
+
+🔄 Status Changes:
+
+[ENG-123](https://linear.app/...)
+Implement user authentication
+In Progress → Done
+
+[ENG-124](https://linear.app/...)
+Fix login bug
+Todo → In Progress
+
+✨ New Issues:
+
+[ENG-125](https://linear.app/...)
+Add password reset flow
+Status: Todo
+
+📋 All Issues by Status:
+
+Done (5):
+• [ENG-123](https://linear.app/...) - Implement user authentication
+• [ENG-120](https://linear.app/...) - Setup CI/CD pipeline
+...
+
+In Progress (4):
+• [ENG-124](https://linear.app/...) - Fix login bug
+...
+
+Todo (3):
+• [ENG-125](https://linear.app/...) - Add password reset flow
+...
+```
+
+## Error Handling
+
+1. **Validation**: Checks all required environment variables on startup
+2. **Graceful Failures**: Sends error notifications via Telegram
+3. **Non-Zero Exit**: Ensures monitoring systems detect failures
+4. **Database Transactions**: Atomic snapshot storage with rollback on errors
+
+## First Run Behavior
+
+On initial execution:
+1. Creates database schema if missing
+2. Stores baseline snapshot of all current issues
+3. Sends full report (no changes detected)
+4. Subsequent runs will detect deltas
+
+## Monitoring
 
 ### Health Checks
 
 ```bash
-# Check last snapshot time
-psql $PG_CONNECTION_STRING -c "SELECT MAX(snapshot_at) FROM linear_ticket_snapshots;"
+# View cron logs
+openclaw cron logs linear-tracker
 
-# View recent changes
-psql $PG_CONNECTION_STRING -c "
-  SELECT ticket_identifier, state_name, snapshot_at 
-  FROM linear_ticket_snapshots 
-  ORDER BY snapshot_at DESC 
-  LIMIT 20;
-"
+# Check database
+psql "$PG_CONNECTION_STRING" -c "SELECT COUNT(*) FROM linear_ticket_snapshots;"
 
-# Check cron logs
-openclaw cron logs linear-ticket-tracker
+# Test Telegram delivery
+curl -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+  -d "chat_id=${TELEGRAM_CHAT_ID}&text=Test"
 ```
 
-## Security Considerations
+### Success Indicators
 
-✅ **API Keys** - Never commit to git; use secrets management
-✅ **Database** - Use restricted user with minimal permissions
-✅ **Telegram** - Bot token should be environment-specific
-✅ **HTTPS** - All API calls use secure connections
-✅ **No data leakage** - Snapshots stored locally in PostgreSQL
+- ✅ Telegram reports delivered daily at 10:00 AM IST
+- ✅ Database snapshots incrementing (one per run)
+- ✅ Status changes detected when issues move
+- ✅ No error notifications in Telegram
 
-## Dependencies
+## Maintenance
 
-- **Runtime**: Node.js >= 18.0.0
-- **Database**: PostgreSQL (any recent version)
-- **NPM Package**: `pg` (PostgreSQL client)
-- **External APIs**: 
-  - Linear GraphQL API (https://api.linear.app/graphql)
-  - Telegram Bot API (https://api.telegram.org)
+### Database Cleanup
 
-## Error Handling
+Snapshots accumulate over time. To keep last 90 days:
 
-The system includes comprehensive error handling:
+```sql
+DELETE FROM linear_ticket_snapshots 
+WHERE snapshot_time < NOW() - INTERVAL '90 days';
+```
 
-- ✅ Environment variable validation on startup
-- ✅ Database connection error handling
-- ✅ Linear API error detection and reporting
-- ✅ Telegram delivery error handling
-- ✅ Exit code 1 on any failure (for cron monitoring)
+Consider adding this to a monthly maintenance script.
 
-## Limitations
+### Credential Rotation
 
-- Only tracks tickets assigned to the configured user
-- Does not track completed or canceled tickets
-- Snapshots stored indefinitely (consider cleanup cron for old data)
-- Rate limited by Linear API (100 requests/hour for most plans)
-- Maximum 100 tickets per fetch (can be increased if needed)
+When rotating credentials:
+1. Update `.env` file
+2. Restart cron job: `openclaw cron restart linear-tracker`
+3. Verify next run with: `openclaw cron logs linear-tracker`
 
-## Future Enhancements
+## Extension Ideas
 
-Potential improvements (not implemented):
-
+Future enhancements:
+- Priority change detection
+- Assignee change tracking
+- Custom status transition alerts
+- Weekly/monthly digest mode
 - Multi-user support
-- Webhook-based real-time updates
-- Custom notification templates
-- Slack/Discord integration
-- Historical trend analysis
-- Ticket age tracking
-- SLA monitoring
-- Custom filters (labels, teams, projects)
+- Issue age tracking
+- SLA violation warnings
 
-## Support
+## Files Structure
 
-For issues or questions:
+```
+linear-ticket-tracker/
+├── index.js              # Main application logic
+├── package.json          # Dependencies and scripts
+├── README.md             # User-facing documentation
+├── DEPLOY.md             # Deployment instructions
+├── SYSTEM_SUMMARY.md     # This file (technical overview)
+├── .env.example          # Environment template
+└── .gitignore            # Git exclusions
+```
 
-1. Check README.md for usage documentation
-2. Review DEPLOYMENT.md for setup guidance
-3. Inspect application logs: `openclaw cron logs linear-ticket-tracker`
-4. Test database connection and Linear API access
-5. Verify Telegram bot configuration
+## Support & Troubleshooting
+
+See `DEPLOY.md` for:
+- Detailed setup instructions
+- Credential acquisition guides
+- Common issues and solutions
+- Testing procedures
 
 ## License
 
-MIT License - See package.json
+MIT
 
 ---
 
-**Status**: ✅ Production Ready
-**Last Updated**: 2026-03-30
-**Version**: 1.0.0
+**Created**: March 30, 2026  
+**System**: OpenClaw Deployer  
+**Status**: Production Ready ✅
